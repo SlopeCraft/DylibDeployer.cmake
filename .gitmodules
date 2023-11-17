@@ -1,0 +1,3 @@
+[submodule "3rdParty/DLLDeployer"]
+	path = 3rdParty/DLLDeployer
+	url = https://github.com/SlopeCraft/DLLDeployer
