@@ -271,12 +271,13 @@ function(DylibD_fix_install_name bin_location)
     endif()
 
     DylibD_is_framework(${DDfin_INSTALL_NAME} is_framework)
-    message(STATUS "iname = ${DDfin_INSTALL_NAME}, is_framework = ${is_framework}")
+    #message(STATUS "iname = ${DDfin_INSTALL_NAME}, is_framework = ${is_framework}")
     # message(STATUS "Install name: ${DDfin_INSTALL_NAME}")
 
     if(NOT ${is_framework})
         # Deploy simple dylib
         cmake_path(GET DDfin_INSTALL_NAME FILENAME dep_name)
+        #message(STATUS "Finding dylib \"${dep_name}\"")
         find_file(dep_loc 
             NAMES ${dep_name} 
             PATHS ${CMAKE_PREFIX_PATH}
@@ -316,9 +317,10 @@ function(DylibD_fix_install_name bin_location)
                 VERSION_LETTER ${version_letter} 
                 DESTINATION ${DDfin_FRAMEWORK_DIR})
         endif()
-        message(STATUS "path_to_dylib = ${path_to_dylib}")
+        #message(STATUS "path_to_dylib = ${path_to_dylib}")
         set(deployed_dep_loc "${DDfin_FRAMEWORK_DIR}/${fw_name}.framework/${path_to_dylib}")
     endif()
+
     if(DDfin_OUT_DEPLOYED_FILE)
         set(${DDfin_OUT_DEPLOYED_FILE} ${deployed_dep_loc} PARENT_SCOPE)
     endif()
@@ -327,19 +329,20 @@ function(DylibD_fix_install_name bin_location)
     set(new_iname ${deployed_dep_loc})
     if((NOT ${is_rpath}) OR (${DDfin_RPATH_POLICY} STREQUAL "REPLACE"))
         cmake_path(RELATIVE_PATH new_iname BASE_DIRECTORY ${loader_path})
-        message(STATUS "The computed relative path is: \"${new_iname}\"")
+        #message(STATUS "The computed relative path is: \"${new_iname}\"")
         set(new_iname "@loader_path/${new_iname}")
-        message(STATUS "New install name: \"${new_iname}\"")
+        #message(STATUS "New install name: \"${new_iname}\"")
     elseif(${DDfin_RPATH_POLICY} STREQUAL "KEEP")
         cmake_path(RELATIVE_PATH new_iname BASE_DIRECTORY ${DDfin_FRAMEWORK_DIR})
-        message(STATUS "The computed relative path is: \"${new_iname}\"")
+        #message(STATUS "The computed relative path is: \"${new_iname}\"")
         set(new_iname "@rpath/${new_iname}")
-        message(STATUS "New install name: \"${new_iname}\"")
+        #message(STATUS "New install name: \"${new_iname}\"")
     else()
         message(FATAL_ERROR "Invalid rpath policy. DylibD_fix_install_name doesn't accept ${DDfin_RPATH_POLICY}")
     endif()
 
     if(NOT DDfin_DRY_RUN)
+        message(STATUS "Changing install name: \n\tinstall_name_tool \"${bin_location}\" -change \"${DDfin_INSTALL_NAME}\" \"${new_iname}\"")
         #Example:
         #install_name_tool libzip.5.dylib -change @loader_path/../../../../opt/xz/lib/libzstd.1.dylib @loader_path/libzstd.1.dylib
         execute_process(COMMAND install_name_tool "${bin_location}" -change "${DDfin_INSTALL_NAME}" "${new_iname}"
@@ -352,8 +355,9 @@ function(DylibD_fix_install_name bin_location)
 endfunction()
 
 function(DylibD_deploy_libs bin_location)
+    #message(STATUS "Deploying dependency for ${bin_location}")
     cmake_parse_arguments(DDdl ""
-     "RPATH_POLICY;FRAMEWORK_DIR;EXEC_PATH;RPATH"
+      "RPATH_POLICY;FRAMEWORK_DIR;EXEC_PATH;RPATH"
       ""
       ${ARGN})
 
@@ -417,7 +421,7 @@ function(DylibD_deploy_libs bin_location)
                 continue()
             endif()
 
-            set(${resolved} ${deployed_file})
+            set(resolved ${deployed_file})
             #message(STATUS "\"${bin_filename}\" depends on \"${iname}\" which resolves to \"${resolved}\" but it doesn't exist.")
             #continue()
         endif()
