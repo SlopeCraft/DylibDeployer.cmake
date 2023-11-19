@@ -18,6 +18,7 @@ install(TARGETS test
 
 include(DylibDeployer.cmake)
 include(3rdParty/DLLDeployer/QtDeployer.cmake)
+include(Codesigner.cmake)
 
 QD_add_deployqt(test INSTALL_MODE 
     INSTALL_DESTINATION .)
@@ -27,6 +28,8 @@ set(bundle ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_PREFIX}/test.app)
 
 DylibD_deploy_libs("${bundle}/Contents/MacOS/test"
     FRAMEWORK_DIR "${bundle}/Contents/Frameworks")
+
+RCS_sign_configtime(test ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_PREFIX})
 
 # set(lib_name "/opt/homebrew/lib/libzip.5.dylib")
 # DylibD_get_install_names(${lib_name} install_names)
