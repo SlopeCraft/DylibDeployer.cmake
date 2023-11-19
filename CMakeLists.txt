@@ -7,8 +7,9 @@ set(CMAKE_INSTALL_PREFIX install)
 find_package(Qt6 
     COMPONENTS Widgets
     REQUIRED)
+find_package(libzip REQUIRED)
 add_executable(test main.cpp)
-target_link_libraries(test PRIVATE Qt6::Widgets)
+target_link_libraries(test PRIVATE Qt6::Widgets libzip::zip)
 target_compile_features(test PRIVATE cxx_std_20)
 set_target_properties(test PROPERTIES
     MACOSX_BUNDLE ON)
@@ -16,6 +17,10 @@ install(TARGETS test
     BUNDLE DESTINATION .)
 
 include(DylibDeployer.cmake)
+include(3rdParty/DLLDeployer/QtDeployer.cmake)
+
+QD_add_deployqt(test INSTALL_MODE 
+    INSTALL_DESTINATION .)
 
 set(bundle ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_PREFIX}/test.app)
 DylibD_deploy_libs(${bundle}/Contents/MacOS/test
