@@ -130,7 +130,7 @@ function(DylibD_get_install_names lib_location out_list_name)
 
         cmake_path(GET substr STEM dep_stem)
         #message(STATUS "stem = \"${dep_stem}\"")
-        if(${dep_stem} STREQUAL ${given_lib_stem})
+        if(dep_stem STREQUAL ${given_lib_stem})
             continue()
         endif()
 
@@ -199,12 +199,15 @@ function(DylibD_parse_framework_name install_name out_fw_name out_path_to_dylib 
     if(fw_name)
         string(REPLACE "/" "" fw_name ${fw_name})
         string(REPLACE ".framework" "" fw_name ${fw_name})
-        set(${out_fw_name} ${fw_name} PARENT_SCOPE)
         
         string(FIND ${install_name} ".framework/" index REVERSE)
         math(EXPR index "${index}+11")
         string(SUBSTRING ${install_name} ${index} -1 path_to_dylib)
         #message(STATUS "Dylib file in the bundle is \"${path_to_dylib}\"")
+        if((NOT fw_name) OR (NOT path_to_dylib))
+            message(FATAL_ERROR "Failed to parse framework name from install name \"${install_name}\", fw_name = \"${fw_name}\", path_to_dylib = \"${path_to_dylib}\"")
+        endif()
+        set(${out_fw_name} ${fw_name} PARENT_SCOPE)
         set(${out_path_to_dylib} ${path_to_dylib} PARENT_SCOPE)
 
         return()
@@ -254,6 +257,34 @@ function(DylibD_copy_framework)
 
 endfunction()
 
+function(DylibD_search_file_advanced filename search_dirs out_var)
+    cmake_parse_arguments(DDsfa "RETURN_ALL" "" "" ${ARGN})
+    unset(${out_var} PARENT_SCOPE)
+
+    set(searched )
+    foreach(dir ${search_dirs})
+        execute_process(COMMAND find ${dir} -name ${filename} #2>/dev/null
+            OUTPUT_VARIABLE output
+            ERROR_VARIABLE err)
+        string(REPLACE "\n" ";" cur_list "${output}")
+        list(APPEND searched ${cur_list})
+
+        list(LENGTH searched len)
+
+        if((${len} GREATER 0) AND (NOT DDsfa_RETURN_ALL))
+            list(GET searched 0 first_result)
+            set(${out_var} ${first_result} PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
+    
+    if(DDsfa_RETURN_ALL)
+        set(${out_var} ${searched} PARENT_SCOPE)
+    endif()
+
+endfunction()
+
+
 function(DylibD_fix_install_name bin_location)
     cmake_parse_arguments(DDfin "DRY_RUN" "INSTALL_NAME;RPATH_POLICY;RPATH;FRAMEWORK_DIR;OUT_DEPLOYED_FILE;OUT_NEW_INSTALL_NAME" "" ${ARGN})
 
@@ -277,14 +308,25 @@ function(DylibD_fix_install_name bin_location)
     if(NOT ${is_framework})
         # Deploy simple dylib
         cmake_path(GET DDfin_INSTALL_NAME FILENAME dep_name)
+        if(NOT dep_name)
+            message(FATAL_ERROR "Failed to parse dep filename \"${dep_name}\" with given install name ${DDfin_INSTALL_NAME}")
+        endif()
         #message(STATUS "Finding dylib \"${dep_name}\"")
         find_file(dep_loc 
             NAMES ${dep_name} 
-            PATHS ${CMAKE_PREFIX_PATH}
+            PATHS ${CMAKE_PREFIX_PATH} /opt/homebrew /usr/local/Cellar
             PATH_SUFFIXES lib bin lib-exec
             NO_CACHE
-            DOC "Find dependency \"${dep_name}\""
-            REQUIRED)
+            DOC "Find dependency \"${dep_name}\"")
+        if(NOT dep_loc)
+            message(STATUS "Failed to find dependency \"${dep_name}\" with cmake find_file call. Try find command...")
+
+            DylibD_search_file_advanced(${dep_name} "/opt/homebrew;/usr/local/Cellar;/usr" dep_loc)
+            if(NOT dep_loc)
+                message(STATUS "Failed to find dependency \"${dep_name}\".")
+            endif()
+        endif()
+
 
         message(STATUS "Found ${dep_loc}")
 
@@ -300,7 +342,7 @@ function(DylibD_fix_install_name bin_location)
         # Ex: "@rpath/QtDBus.framework/Versions/A/QtDBus" -> QtDBus
         #     "@loader_path/../../../Versions/A/QtDBus" -> QtDBus
         DylibD_parse_framework_name(${DDfin_INSTALL_NAME} fw_name path_to_dylib version_letter)
-        #message(STATUS "Matched framework name \"${fw_name}\"")
+        message(STATUS "Matched framework name \"${fw_name}\"")
 
 
         # Find the framework
@@ -342,7 +384,7 @@ function(DylibD_fix_install_name bin_location)
     endif()
 
     if(NOT DDfin_DRY_RUN)
-        message(STATUS "Changing install name: \n\tinstall_name_tool \"${bin_location}\" -change \"${DDfin_INSTALL_NAME}\" \"${new_iname}\"")
+        message(STATUS "Change install name with: \n  install_name_tool \"${bin_location}\" -change \"${DDfin_INSTALL_NAME}\" \"${new_iname}\"")
         #Example:
         #install_name_tool libzip.5.dylib -change @loader_path/../../../../opt/xz/lib/libzstd.1.dylib @loader_path/libzstd.1.dylib
         execute_process(COMMAND install_name_tool "${bin_location}" -change "${DDfin_INSTALL_NAME}" "${new_iname}"

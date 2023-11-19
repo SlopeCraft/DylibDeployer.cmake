@@ -36,4 +36,4 @@ DylibD_deploy_libs("${bundle}/Contents/MacOS/test"
     FRAMEWORK_DIR "${bundle}/Contents/Frameworks"
     RPATH_POLICY REPLACE)
 
-RCS_sign_configtime(test ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_PREFIX})
+#RCS_sign_configtime(test ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_PREFIX})
