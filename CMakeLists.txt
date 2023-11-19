@@ -20,6 +20,12 @@ include(DylibDeployer.cmake)
 include(3rdParty/DLLDeployer/QtDeployer.cmake)
 include(Codesigner.cmake)
 
+DylibD_parse_framework_name("@loader_path/../../../Versions/A/QtDBus" fw_name path_to_dylib ver_letter)
+message(STATUS "Parse result: fw_name = \"${fw_name}\", path_to_dylib = \"${path_to_dylib}\", ver_letter = ${ver_letter}")
+
+DylibD_parse_framework_name("@rpath/QtDBus.framework/Versions/T/QtDBus" fw_name path_to_dylib ver_letter)
+message(STATUS "Parse result: fw_name = \"${fw_name}\", path_to_dylib = \"${path_to_dylib}\", ver_letter = ${ver_letter}")
+
 QD_add_deployqt(test INSTALL_MODE 
     INSTALL_DESTINATION .)
 
@@ -27,23 +33,7 @@ set(bundle ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_PREFIX}/test.app)
 #set(bundle "/System/Applications/Utilities/Activity Monitor.app")
 
 DylibD_deploy_libs("${bundle}/Contents/MacOS/test"
-    FRAMEWORK_DIR "${bundle}/Contents/Frameworks")
+    FRAMEWORK_DIR "${bundle}/Contents/Frameworks"
+    RPATH_POLICY REPLACE)
 
 RCS_sign_configtime(test ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_PREFIX})
-
-# set(lib_name "/opt/homebrew/lib/libzip.5.dylib")
-# DylibD_get_install_names(${lib_name} install_names)
-# message(STATUS "install_names = ${install_names}")
-
-# foreach(iname ${install_names})
-    
-# DylibD_resolve_install_name(
-#     ${iname}
-#     out
-#     EXEC_PATH "/exe"
-#     LOADER_PATH "/opt/homebrew/Cellar/libzip/1.10.1/lib"
-#     RPATH "/rpath")
-
-# message(STATUS "${iname} resolved to : \"${out}\"")
-# endforeach(iname ${install_names})
-

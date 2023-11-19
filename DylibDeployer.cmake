@@ -30,6 +30,10 @@ function(DylibD_is_framework bin_location out_var_name)
         set(${out_var_name} ON PARENT_SCOPE)
         return()
     endif()
+    if(${bin_location} MATCHES "/Versions/[A-Z]/")
+        set(${out_var_name} ON PARENT_SCOPE)
+        return()
+    endif()
 
     set(${out_var_name} OFF PARENT_SCOPE)
 endfunction()
@@ -68,6 +72,7 @@ function(DylibD_is_system_dylib lib_location out_var_name)
         /usr/local/lib/
         /var/lib/
         /System/Library
+        /Library
         )
 
     foreach (system_prefix ${DLLD_system_prefixes})
@@ -81,7 +86,9 @@ endfunction()
 
 
 function(DylibD_get_install_names lib_location out_list_name)
-
+    if(NOT EXISTS ${lib_location})
+        message(FATAL_ERROR "dylib/executable file \"${lib_location}\" doesn't exists, or is a broken symlink.")
+    endif()
     if(IS_SYMLINK ${lib_location})
         file(REAL_PATH ${lib_location} lib_location)
         #message(STATUS "Link resolved to \"${lib_location}\"")
@@ -152,7 +159,7 @@ function(DylibD_check_rpath_option) # DDcr
 
     elseif(${DDcr_RPATH_POLICY} STREQUAL "REPLACE")
         if(NOT IS_DIRECTORY ${DDcr_RPATH})
-            message(FATAL_ERROR "The rpath policy is \"${DDcr_RPATH_POLICY}\", but given rpath value is \"${DDcr_RPATH}\"")
+            message(FATAL_ERROR "The rpath policy is \"${DDcr_RPATH_POLICY}\", but given rpath value is \"${DDcr_RPATH}\" which is not a directory.")
         endif()
     elseif()
         message(FATAL_ERROR "Invalid value \"${DDcr_RPATH_POLICY}\" for RPATH policy. Valid values: KEEP;REPLACE")
@@ -160,8 +167,102 @@ function(DylibD_check_rpath_option) # DDcr
 
 endfunction()
 
+function(DylibD_find_framework fw_name out_var)
+    find_path(fw_loc
+        NAMES "${fw_name}.framework/${fw_name}"
+        PATHS ${CMAKE_PREFIX_PATH}
+        PATH_SUFFIXES lib
+        REQUIRED
+        DOC "Searching for framework \"${fw_name}.framework\"")
+
+    set(${out_var} "${fw_loc}/${fw_name}.framework" PARENT_SCOPE)
+endfunction()
+
+
+# match framename name froim install nanme. 
+# Ex: "@rpath/QtDBus.framework/Versions/A/QtDBus" -> QtDBus
+#     "@loader_path/../../../Versions/A/QtDBus" -> QtDBus
+function(DylibD_parse_framework_name install_name out_fw_name out_path_to_dylib out_version_letter)
+    unset(${out_fw_name} PARENT_SCOPE)
+    unset(${out_path_to_dylib} PARENT_SCOPE)
+    unset(${out_version_letter} PARENT_SCOPE)
+
+    string(REGEX MATCH "/Versions/[A-Z]/${fw_name}" version_letter ${install_name})
+    string(SUBSTRING ${version_letter} 10 1 version_letter)
+    if(NOT ${version_letter} MATCHES "[A-Z]")
+        message(FATAL_ERROR "Failed to parse version letter from \"${install_name}\"")
+    endif()
+    set(${out_version_letter} ${version_letter} PARENT_SCOPE)
+
+    # Type 1: "@rpath/QtDBus.framework/Versions/A/QtDBus" -> QtDBus and Versions/A/QtDBus
+    string(REGEX MATCH "/[A-Za-z0-9_]+\.framework/" fw_name ${install_name})
+    if(fw_name)
+        string(REPLACE "/" "" fw_name ${fw_name})
+        string(REPLACE ".framework" "" fw_name ${fw_name})
+        set(${out_fw_name} ${fw_name} PARENT_SCOPE)
+        
+        string(FIND ${install_name} ".framework/" index REVERSE)
+        math(EXPR index "${index}+11")
+        string(SUBSTRING ${install_name} ${index} -1 path_to_dylib)
+        #message(STATUS "Dylib file in the bundle is \"${path_to_dylib}\"")
+        set(${out_path_to_dylib} ${path_to_dylib} PARENT_SCOPE)
+
+        return()
+    endif()
+
+    # Type 2: "@loader_path/../../../Versions/A/QtDBus" -> QtDBus and Versions/A/QtDBus
+    string(REGEX MATCH "/Versions/[A-Z]/.+" fw_name ${install_name})
+    if(fw_name)
+        string(SUBSTRING ${fw_name} 12 -1 fw_name)
+        #message(STATUS "line 202: fw_name = \"${fw_name}\"")
+        set(path_to_dylib "Versions/${version_letter}/${fw_name}")
+        #message(STATUS "version_letter is \"${version_letter}\"")
+
+        if((NOT fw_name) OR (NOT path_to_dylib))
+            message(FATAL_ERROR "Failed to parse framework name from install name \"${install_name}\", fw_name = \"${fw_name}\", path_to_dylib = \"${path_to_dylib}\"")
+        endif()
+        set(${out_fw_name} ${fw_name} PARENT_SCOPE)
+        set(${out_path_to_dylib} ${path_to_dylib} PARENT_SCOPE)
+        return()
+    endif()
+
+    message(FATAL_ERROR "Failed to parse framework name from install name \"${install_name}\"")
+        
+endfunction()
+
+function(DylibD_copy_framework)
+    cmake_parse_arguments(DDcf "" "NAME;LOCATION;VERSION_LETTER;DESTINATION" "" ${ARGN})
+    file(REAL_PATH ${DDcf_LOCATION} DDcf_LOCATION)
+
+    set(fw_dir "${DDcf_DESTINATION}/${DDcf_NAME}.framework")
+    file(MAKE_DIRECTORY ${fw_dir})
+    file(MAKE_DIRECTORY "${fw_dir}/Versions")
+    file(MAKE_DIRECTORY "${fw_dir}/Versions/${DDcf_VERSION_LETTER}")
+
+    # QtGui.framework/Versions/A/QtGui (a dylib)
+    file(COPY "${DDcf_LOCATION}/Versions/${DDcf_VERSION_LETTER}/${DDcf_NAME}" 
+        DESTINATION "${fw_dir}/Versions/${DDcf_VERSION_LETTER}" USE_SOURCE_PERMISSIONS)
+    # QtGui.framework/Versions/A/Resources (dir)
+    file(COPY "${DDcf_LOCATION}/Versions/${DDcf_VERSION_LETTER}/Resources" 
+        DESTINATION "${fw_dir}/Versions/${DDcf_VERSION_LETTER}" USE_SOURCE_PERMISSIONS)
+    # QtGui.framework/Versions/Current -> A (symlink)
+    file(CREATE_LINK "${DDcf_VERSION_LETTER}" "${fw_dir}/Versions/Current" SYMBOLIC)
+    # QtGui.framework/QtGui -> Versions/Current/QtGui (symlink)
+    file(CREATE_LINK "Versions/Current/${DDcf_NAME}" "${fw_dir}/${DDcf_NAME}" SYMBOLIC)
+    # QtGui.framework/Resources -> Versions/Current/Resources (symlink)
+    file(CREATE_LINK "Versions/Current/Resources" "${fw_dir}/Resources" SYMBOLIC)
+
+endfunction()
+
 function(DylibD_fix_install_name bin_location)
     cmake_parse_arguments(DDfin "DRY_RUN" "INSTALL_NAME;RPATH_POLICY;RPATH;FRAMEWORK_DIR;OUT_DEPLOYED_FILE;OUT_NEW_INSTALL_NAME" "" ${ARGN})
+
+    if(DDfin_OUT_DEPLOYED_FILE)
+        unset(${DDfin_OUT_DEPLOYED_FILE} PARENT_SCOPE)
+    endif()
+    if(DDfin_OUT_NEW_INSTALL_NAME)
+        unset(${DDfin_OUT_NEW_INSTALL_NAME} PARENT_SCOPE)
+    endif()
 
     cmake_path(GET bin_location PARENT_PATH loader_path)
     set(is_rpath OFF)
@@ -169,39 +270,74 @@ function(DylibD_fix_install_name bin_location)
         set(is_rpath ON)
     endif()
 
-    if(${is_rpath})
-        return()
-    endif()
-
     DylibD_is_framework(${DDfin_INSTALL_NAME} is_framework)
-    if(${is_framework})
-        return()
+    message(STATUS "iname = ${DDfin_INSTALL_NAME}, is_framework = ${is_framework}")
+    # message(STATUS "Install name: ${DDfin_INSTALL_NAME}")
+
+    if(NOT ${is_framework})
+        # Deploy simple dylib
+        cmake_path(GET DDfin_INSTALL_NAME FILENAME dep_name)
+        find_file(dep_loc 
+            NAMES ${dep_name} 
+            PATHS ${CMAKE_PREFIX_PATH}
+            PATH_SUFFIXES lib bin lib-exec
+            NO_CACHE
+            DOC "Find dependency \"${dep_name}\""
+            REQUIRED)
+
+        message(STATUS "Found ${dep_loc}")
+
+        set(deployed_dep_loc "${DDfin_FRAMEWORK_DIR}/${dep_name}")
+        if((NOT DDfin_DRY_RUN) AND (NOT EXISTS ${deployed_dep_loc}))
+            file(COPY ${dep_loc} DESTINATION ${DDfin_FRAMEWORK_DIR} FOLLOW_SYMLINK_CHAIN)
+        endif()
+    else()
+        # Deploy framework
+        # deployed_dep_loc must be set to the dep file
+        
+        # match framename name froim install nanme. 
+        # Ex: "@rpath/QtDBus.framework/Versions/A/QtDBus" -> QtDBus
+        #     "@loader_path/../../../Versions/A/QtDBus" -> QtDBus
+        DylibD_parse_framework_name(${DDfin_INSTALL_NAME} fw_name path_to_dylib version_letter)
+        #message(STATUS "Matched framework name \"${fw_name}\"")
+
+
+        # Find the framework
+        DylibD_find_framework(${fw_name} fw_loc)
+        message(STATUS "Found framework \"${fw_name}\" at \"${fw_loc}\"")
+        if(NOT EXISTS "${fw_loc}/${path_to_dylib}")
+            message(FATAL_ERROR "Dylib found framework ${fw_loc}, but dep file \"${fw_loc}/${path_to_dylib}\" doesn't exist.")
+        endif()
+
+        if((NOT DDfin_DRY_RUN) AND (NOT IS_DIRECTORY ${deployed_dep_loc}))
+            message(STATUS "Copying ${fw_loc} to ${DDfin_FRAMEWORK_DIR}")
+            DylibD_copy_framework(NAME ${fw_name} 
+                LOCATION ${fw_loc} 
+                VERSION_LETTER ${version_letter} 
+                DESTINATION ${DDfin_FRAMEWORK_DIR})
+        endif()
+        message(STATUS "path_to_dylib = ${path_to_dylib}")
+        set(deployed_dep_loc "${DDfin_FRAMEWORK_DIR}/${fw_name}.framework/${path_to_dylib}")
     endif()
-
-    cmake_path(GET DDfin_INSTALL_NAME FILENAME dep_name)
-    find_file(dep_loc 
-        NAMES ${dep_name} 
-        PATHS ${CMAKE_PREFIX_PATH}
-        PATH_SUFFIXES lib bin lib-exec
-        NO_CACHE
-        DOC "Find dependency \"${dep_name}\""
-        REQUIRED)
-
-    message(STATUS "Found ${dep_loc}")
-
-    if(NOT DDfin_DRY_RUN)
-        file(COPY ${dep_loc} DESITNATION ${DDfin_FRAMEWORK_DIR})
-    endif()
-    set(deployed_dep_loc "${DDfin_FRAMEWORK_DIR}/${dep_name}")
     if(DDfin_OUT_DEPLOYED_FILE)
         set(${DDfin_OUT_DEPLOYED_FILE} ${deployed_dep_loc} PARENT_SCOPE)
     endif()
 
+    # Change the install name
     set(new_iname ${deployed_dep_loc})
-    cmake_path(RELATIVE_PATH new_iname BASE_DIRECTORY ${DDfin_FRAMEWORK_DIR})
-    message(STATUS "The computed relative path is: \"${new_iname}\"")
-    set(new_iname "@loader_path/${new_iname}")
-    message(STATUS "New install name: \"${new_iname}\"")
+    if((NOT ${is_rpath}) OR (${DDfin_RPATH_POLICY} STREQUAL "REPLACE"))
+        cmake_path(RELATIVE_PATH new_iname BASE_DIRECTORY ${loader_path})
+        message(STATUS "The computed relative path is: \"${new_iname}\"")
+        set(new_iname "@loader_path/${new_iname}")
+        message(STATUS "New install name: \"${new_iname}\"")
+    elseif(${DDfin_RPATH_POLICY} STREQUAL "KEEP")
+        cmake_path(RELATIVE_PATH new_iname BASE_DIRECTORY ${DDfin_FRAMEWORK_DIR})
+        message(STATUS "The computed relative path is: \"${new_iname}\"")
+        set(new_iname "@rpath/${new_iname}")
+        message(STATUS "New install name: \"${new_iname}\"")
+    else()
+        message(FATAL_ERROR "Invalid rpath policy. DylibD_fix_install_name doesn't accept ${DDfin_RPATH_POLICY}")
+    endif()
 
     if(NOT DDfin_DRY_RUN)
         #Example:
@@ -269,17 +405,21 @@ function(DylibD_deploy_libs bin_location)
         if(NOT EXISTS ${resolved})
             # The dependency doesn't exist. Try deploying it.
 
-            #"DRY_RUN" "INSTALL_NAME;RPATH_POLICY;RPATH;FRAMEWORK_DIR;OUT_DEPLOYED_FILE;OUT_NEW_INSTALL_NAME"
-
-            DylibD_fix_install_name(${bin_location} DRY_RUN
+            DylibD_fix_install_name(${bin_location}
                 INSTALL_NAME ${iname}
                 FRAMEWORK_DIR ${DDdl_FRAMEWORK_DIR}
                 RPATH_POLICY ${DDdl_RPATH_POLICY}
                 RPATH ${DDdl_RPATH}
+                OUT_DEPLOYED_FILE deployed_file
                 )
+            if(NOT EXISTS ${deployed_file})
+                message(FATAL_ERROR "${bin_filename} requires \"${deployed_file}\" but it is not deployed. iname = \"${iname}\"")
+                continue()
+            endif()
 
+            set(${resolved} ${deployed_file})
             #message(STATUS "\"${bin_filename}\" depends on \"${iname}\" which resolves to \"${resolved}\" but it doesn't exist.")
-            continue()
+            #continue()
         endif()
 
 
