@@ -23,8 +23,10 @@ QD_add_deployqt(test INSTALL_MODE
     INSTALL_DESTINATION .)
 
 set(bundle ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_PREFIX}/test.app)
-DylibD_deploy_libs(${bundle}/Contents/MacOS/test
-    FRAMEWORK_DIR ${bundle}/Contents/Frameworks)
+#set(bundle "/System/Applications/Utilities/Activity Monitor.app")
+
+DylibD_deploy_libs("${bundle}/Contents/MacOS/test"
+    FRAMEWORK_DIR "${bundle}/Contents/Frameworks")
 
 # set(lib_name "/opt/homebrew/lib/libzip.5.dylib")
 # DylibD_get_install_names(${lib_name} install_names)
@@ -35,7 +37,7 @@ DylibD_deploy_libs(${bundle}/Contents/MacOS/test
 # DylibD_resolve_install_name(
 #     ${iname}
 #     out
-#     EXE_PATH "/exe"
+#     EXEC_PATH "/exe"
 #     LOADER_PATH "/opt/homebrew/Cellar/libzip/1.10.1/lib"
 #     RPATH "/rpath")
 

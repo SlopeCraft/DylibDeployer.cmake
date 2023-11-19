@@ -14,14 +14,30 @@ if (NOT ${APPLE})
     return()
 endif ()
 
+function(DylibD_is_framework bin_location out_var_name)
+    if(${bin_location} MATCHES ".framework/Versions/")
+        set(${out_var_name} ON PARENT_SCOPE)
+        return()
+    endif()
+
+    set(${out_var_name} OFF PARENT_SCOPE)
+endfunction()
+
 function(DylibD_is_dylib library_file out_var_name)
     
     cmake_path(GET library_file EXTENSION extension)
-    string(TOLOWER ${extension} extension)
+    string(TOLOWER "${extension}" extension)
     if(extension MATCHES .dylib)
         set(${out_var_name} ON PARENT_SCOPE)
         return()
     endif()
+
+    DylibD_is_framework(${library_file} is_framework)
+    if(${is_framework})
+        set(${out_var_name} ON PARENT_SCOPE)
+        return()
+    endif()
+
     set(${out_var_name} OFF PARENT_SCOPE)
 endfunction()
 
@@ -39,7 +55,9 @@ function(DylibD_is_system_dylib lib_location out_var_name)
         /usr/lib/
         /usr/lib/system/
         /usr/local/lib/
-        /var/lib/)
+        /var/lib/
+        /System/Library
+        )
 
     foreach (system_prefix ${DLLD_system_prefixes})
         if(${lib_location} MATCHES ${system_prefix})
@@ -55,7 +73,7 @@ function(DylibD_get_install_names lib_location out_list_name)
 
     if(IS_SYMLINK ${lib_location})
         file(REAL_PATH ${lib_location} lib_location)
-        message(STATUS "Link resolved to \"${lib_location}\"")
+        #message(STATUS "Link resolved to \"${lib_location}\"")
     endif()
 
     cmake_path(GET lib_location STEM given_lib_stem)
@@ -107,9 +125,9 @@ function(DylibD_get_install_names lib_location out_list_name)
 endfunction()
 
 function(DylibD_resolve_install_name install_name out_var)
-    cmake_parse_arguments(DDrin "" "EXE_PATH;LOADER_PATH;RPATH" "" ${ARGN})
+    cmake_parse_arguments(DDrin "" "EXEC_PATH;LOADER_PATH;RPATH" "" ${ARGN})
 
-    string(REPLACE "@executable_path" ${DDrin_EXE_PATH} install_name ${install_name})
+    string(REPLACE "@executable_path" ${DDrin_EXEC_PATH} install_name ${install_name})
     string(REPLACE "@loader_path" ${DDrin_LOADER_PATH} install_name ${install_name})
     string(REPLACE "@rpath" ${DDrin_RPATH} install_name ${install_name})
 
@@ -118,20 +136,64 @@ endfunction()
 
 
 function(DylibD_deploy_libs bin_location)
-    cmake_parse_arguments(DDdl "" "FRAMEWORK_DIR;EXEC_PATH" "" ${ARGN})
+    cmake_parse_arguments(DDdl "RPATH_POLICY"
+     "FRAMEWORK_DIR;EXEC_PATH"
+      ""
+      ${ARGN})
 
-    if(${bin_location} MATCHES ".dylib")
+    # RPATH_POLICY: KEEP REPLACE
+    # EXEC_PATH should not be set if binary is an executable
+
+    DylibD_is_dylib(${bin_location} is_dylib)
+
+    if(${is_dylib})
+    else()
         if(DDdl_EXEC_PATH)
-            message(WARNING "You should not set EXEC_PATH when given binary is an executable. The given value will be overwritten.")
+            message(FATAL_ERROR "You should not set EXEC_PATH when given binary(${bin_location}) is an executable.")
         endif()
-        cmake_path(GET bin_location PARENT_DIRECTORY DDdl_EXEC_PATH)
+        cmake_path(GET bin_location PARENT_PATH DDdl_EXEC_PATH)
     endif()
 
-    message(STATUS "DDdl_EXEC_PATH = \"${DDdl_EXEC_PATH}\"")
-    message(STATUS "DDdl_RAMEWORK_DIR = \"${DDdl_RAMEWORK_DIR}\"")
+    cmake_path(GET bin_location PARENT_PATH loader_path)
+
+    if(NOT DDdl_RPATH_POLICY)
+        set(DDdl_RPATH_POLICY KEEP)
+    endif()
+
+
+    #message(STATUS "DDdl_EXEC_PATH = \"${DDdl_EXEC_PATH}\"")
+    #message(STATUS "DDdl_FRAMEWORK_DIR = \"${DDdl_FRAMEWORK_DIR}\"")
 
     DylibD_get_install_names(${bin_location} install_names)
-    message(STATUS "install names:\n${install_names}")
+    #message(STATUS "install names:\n${install_names}")
+
+    cmake_path(GET bin_location FILENAME bin_filename)
+
+    foreach(iname ${install_names})
+        DylibD_resolve_install_name(${iname} resolved 
+            EXEC_PATH ${DDdl_EXEC_PATH}
+            LOADER_PATH ${loader_path}
+            RPATH "@rpath")
+
+        DylibD_is_system_dylib(${resolved} is_sys)
+        if(${is_sys})
+            # Do not check system libs, many system libs are not found in filesystem but program can still launch.
+            # This can be explained by some mechanics like vDSO
+            continue()
+        endif()
+
+        if(NOT EXISTS ${resolved})
+            message(STATUS "\"${bin_filename}\" depends on \"${iname}\" which resolves to \"${resolved}\" but it doesn't exist.")
+            continue()
+        endif()
+
+
+        DylibD_deploy_libs(${resolved}
+            RPATH_POLICY ${DDdl_RPATH_POLICY}
+            FRAMEWORK_DIR ${DDdl_FRAMEWORK_DIR}
+            EXEC_PATH ${DDdl_EXEC_PATH})
+    endforeach()
+    
 
     
 endfunction()
