@@ -168,6 +168,10 @@ function(DylibD_check_rpath_option) # DDcr
 endfunction()
 
 function(DylibD_find_framework fw_name out_var)
+    if(NOT fw_name)
+        message(FATAL_ERROR "Invalid framework name \"${fw_name}\"")
+    endif()
+
     find_path(fw_loc
         NAMES "${fw_name}.framework/${fw_name}"
         PATHS ${CMAKE_PREFIX_PATH}
@@ -186,8 +190,9 @@ function(DylibD_parse_framework_name install_name out_fw_name out_path_to_dylib 
     unset(${out_fw_name} PARENT_SCOPE)
     unset(${out_path_to_dylib} PARENT_SCOPE)
     unset(${out_version_letter} PARENT_SCOPE)
+    message(STATUS "Parsing framework name from install name ${install_name}")
 
-    string(REGEX MATCH "/Versions/[A-Z]/${fw_name}" version_letter ${install_name})
+    string(REGEX MATCH "/Versions/[A-Z]/[A-Za-z0-9_]+$" version_letter ${install_name})
     string(SUBSTRING ${version_letter} 10 1 version_letter)
     if(NOT ${version_letter} MATCHES "[A-Z]")
         message(FATAL_ERROR "Failed to parse version letter from \"${install_name}\"")
@@ -311,27 +316,27 @@ function(DylibD_fix_install_name bin_location)
         if(NOT dep_name)
             message(FATAL_ERROR "Failed to parse dep filename \"${dep_name}\" with given install name ${DDfin_INSTALL_NAME}")
         endif()
-        #message(STATUS "Finding dylib \"${dep_name}\"")
-        find_file(dep_loc 
-            NAMES ${dep_name} 
-            PATHS ${CMAKE_PREFIX_PATH} /opt/homebrew /usr/local/Cellar
-            PATH_SUFFIXES lib bin lib-exec
-            NO_CACHE
-            DOC "Find dependency \"${dep_name}\"")
-        if(NOT dep_loc)
-            message(STATUS "Failed to find dependency \"${dep_name}\" with cmake find_file call. Try find command...")
-
-            DylibD_search_file_advanced(${dep_name} "/opt/homebrew;/usr/local/Cellar;/usr" dep_loc)
-            if(NOT dep_loc)
-                message(STATUS "Failed to find dependency \"${dep_name}\".")
-            endif()
-        endif()
-
-
-        message(STATUS "Found ${dep_loc}")
 
         set(deployed_dep_loc "${DDfin_FRAMEWORK_DIR}/${dep_name}")
         if((NOT DDfin_DRY_RUN) AND (NOT EXISTS ${deployed_dep_loc}))
+            # The dependency doesn't exist in bundle, search for it.
+            #message(STATUS "Finding dylib \"${dep_name}\"")
+            find_file(dep_loc 
+                NAMES ${dep_name} 
+                PATHS ${CMAKE_PREFIX_PATH} /opt/homebrew /usr/local/Cellar
+                PATH_SUFFIXES lib bin lib-exec
+                NO_CACHE
+                DOC "Find dependency \"${dep_name}\"")
+            if(NOT dep_loc)
+                message(STATUS "Failed to find dependency \"${dep_name}\" with cmake find_file call. Try find command...")
+
+                DylibD_search_file_advanced(${dep_name} "/opt/homebrew;/usr/local/Cellar;/usr" dep_loc)
+                if(NOT dep_loc)
+                    message(STATUS "Failed to find dependency \"${dep_name}\".")
+                endif()
+            endif()
+
+            message(STATUS "Found ${dep_loc}")
             file(COPY ${dep_loc} DESTINATION ${DDfin_FRAMEWORK_DIR} FOLLOW_SYMLINK_CHAIN)
         endif()
     else()
@@ -342,17 +347,19 @@ function(DylibD_fix_install_name bin_location)
         # Ex: "@rpath/QtDBus.framework/Versions/A/QtDBus" -> QtDBus
         #     "@loader_path/../../../Versions/A/QtDBus" -> QtDBus
         DylibD_parse_framework_name(${DDfin_INSTALL_NAME} fw_name path_to_dylib version_letter)
+        if(NOT fw_name)
+            message(FATAL_ERROR "Invalid framework name \"${fw_name}\"")
+        endif()
         message(STATUS "Matched framework name \"${fw_name}\"")
 
-
-        # Find the framework
-        DylibD_find_framework(${fw_name} fw_loc)
-        message(STATUS "Found framework \"${fw_name}\" at \"${fw_loc}\"")
-        if(NOT EXISTS "${fw_loc}/${path_to_dylib}")
-            message(FATAL_ERROR "Dylib found framework ${fw_loc}, but dep file \"${fw_loc}/${path_to_dylib}\" doesn't exist.")
-        endif()
-
         if((NOT DDfin_DRY_RUN) AND (NOT IS_DIRECTORY ${deployed_dep_loc}))
+            # The required framework doesn't exist, search for it.
+            # Find the framework
+            DylibD_find_framework(${fw_name} fw_loc)
+            if(NOT EXISTS "${fw_loc}/${path_to_dylib}")
+                message(FATAL_ERROR "Found framework ${fw_loc}, but dep file \"${fw_loc}/${path_to_dylib}\" doesn't exist.")
+            endif()
+            message(STATUS "Found framework \"${fw_name}\" at \"${fw_loc}\"")
             message(STATUS "Copying ${fw_loc} to ${DDfin_FRAMEWORK_DIR}")
             DylibD_copy_framework(NAME ${fw_name} 
                 LOCATION ${fw_loc} 
