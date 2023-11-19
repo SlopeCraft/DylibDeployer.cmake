@@ -26,12 +26,13 @@ include(Codesigner.cmake)
 # DylibD_parse_framework_name("@rpath/QtDBus.framework/Versions/T/QtDBus" fw_name path_to_dylib ver_letter)
 # message(STATUS "Parse result: fw_name = \"${fw_name}\", path_to_dylib = \"${path_to_dylib}\", ver_letter = ${ver_letter}")
 
-QD_add_deployqt(test INSTALL_MODE 
-    INSTALL_DESTINATION bin)
+# QD_add_deployqt(test INSTALL_MODE 
+#     INSTALL_DESTINATION bin)
 
-DylibD_add_deploy(test 
+# DylibD_add_deploy(test 
+#     INSTALL_DESTINATION bin)
+RCS_add_codesign(test
     INSTALL_DESTINATION bin)
-RCS_add_codesign(test)
 
 #set(bundle ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_PREFIX}/test.app)
 #set(bundle "/System/Applications/Utilities/Activity Monitor.app")
