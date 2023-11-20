@@ -503,14 +503,14 @@ function(DylibD_deploy_libs bin_location)
                 RPATH ${DDdl_RPATH}
                 OUT_DEPLOYED_FILE deployed_file
                 )
+            if(NOT EXISTS ${deployed_file})
+                message(FATAL_ERROR "${bin_filename} requires \"${deployed_file}\" but it is not deployed. install name = \"${iname}\"")
+                continue()
+            endif()
+    
+            set(resolved ${deployed_file})
         endif()
 
-        if(NOT EXISTS ${deployed_file})
-            message(FATAL_ERROR "${bin_filename} requires \"${deployed_file}\" but it is not deployed. install name = \"${iname}\"")
-            continue()
-        endif()
-
-        set(resolved ${deployed_file})
 
         if(NOT EXISTS ${resolved})
             message(FATAL_ERROR "Failed to deploy ${resolved} for install name ${iname}")
