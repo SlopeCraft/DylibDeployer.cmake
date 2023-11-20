@@ -27,6 +27,8 @@ else()
     set(DylibD_working_dir      . CACHE STRING "")
     set(DylibD_install_dest     @DDad_INSTALL_DESTINATION@)
     set(DylibD_path_to_exec     @DDad_PATH_TO_EXEC@)
+    set(DylibD_plugin_dirs      @DDad_PLUGIN_DIRS@)
+
 
     if(NOT CMAKE_INSTALL_PREFIX)
         set(CMAKE_INSTALL_PREFIX @CMAKE_INSTALL_PREFIX@)
@@ -405,7 +407,7 @@ function(DylibD_fix_install_name bin_location)
     endif()
 
     if(NOT DDfin_DRY_RUN)
-        message(STATUS "Change install name of \"${bin_location}\":\n  from \"${DDfin_INSTALL_NAME}\" to \"${new_iname}\"")
+        message(STATUS "Change install name of \"${bin_location}\": from \"${DDfin_INSTALL_NAME}\" to \"${new_iname}\"")
         #Example:
         #install_name_tool libzip.5.dylib -change @loader_path/../../../../opt/xz/lib/libzstd.1.dylib @loader_path/libzstd.1.dylib
         execute_process(COMMAND install_name_tool "${bin_location}" -change "${DDfin_INSTALL_NAME}" "${new_iname}"
@@ -475,6 +477,9 @@ function(DylibD_deploy_libs bin_location)
             continue()
         endif()
 
+        if((EXISTS ${resolved}) AND (${resolved} MATCHES ${DDdl_FRAMEWORK_DIR}))
+            continue()
+        endif()
 
         DylibD_fix_install_name(${bin_location}
             INSTALL_NAME ${iname}
@@ -504,7 +509,7 @@ endfunction()
 
 
 function(DylibD_add_deploy target)
-    cmake_parse_arguments(DDad "" "INSTALL_DESTINATION;RPATH_POLICY;RPATH;PATH_TO_EXEC" "" ${ARGN})
+    cmake_parse_arguments(DDad "" "INSTALL_DESTINATION;RPATH_POLICY;RPATH;PATH_TO_EXEC" "PLUGIN_DIRS" ${ARGN})
     
     if(NOT TARGET ${target})
         message(FATAL_ERROR "${target} is not an target")
@@ -547,9 +552,30 @@ if(NOT ${DylibD_configure_time})
     endif()
     message(STATUS "Deploying dylibs for ${DylibD_bundle_name}.app/${DylibD_path_to_exec}")
 
-    DylibD_deploy_libs("${DylibD_bundle_name}.app/${DylibD_path_to_exec}"
-        FRAMEWORK_DIR "${current_working_dir}/${DylibD_bundle_name}.app/Contents/Frameworks"
+    set(exec_file "${DylibD_bundle_name}.app/${DylibD_path_to_exec}")
+    set(framework_dir "${current_working_dir}/${DylibD_bundle_name}.app/Contents/Frameworks")
+    DylibD_deploy_libs(${exec_file}
+        FRAMEWORK_DIR ${framework_dir}
         RPATH_POLICY ${DylibD_rpath_policy}
         RPATH ${DylibD_rpath}
         )
+
+    cmake_path(GET exec_file PARENT_PATH exec_dir)
+    foreach(plugin_dir ${DylibD_plugin_dirs})
+        if(NOT (${plugin_dir} MATCHES ".app"))
+            set(plugin_dir "${DylibD_bundle_name}.app/${plugin_dir}")
+        endif()
+
+        file(GLOB_RECURSE plugin_dylibs "${plugin_dir}/*.dylib")
+        foreach(dylib_file ${plugin_dylibs})
+            message(STATUS "Deploying for plugin lib ${dylib_file}")
+            DylibD_deploy_libs(${dylib_file}
+                FRAMEWORK_DIR ${framework_dir}
+                EXEC_PATH ${exec_dir}
+                RPATH_POLICY ${DylibD_rpath_policy}
+                RPATH ${DylibD_rpath})
+        endforeach()
+        
+    endforeach()
+    
 endif()

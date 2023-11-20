@@ -30,7 +30,9 @@ QD_add_deployqt(test INSTALL_MODE
     INSTALL_DESTINATION bin)
 
 DylibD_add_deploy(test 
-    INSTALL_DESTINATION bin)
+    INSTALL_DESTINATION bin
+    PLUGIN_DIRS "Contents/PlugIns/platforms;Contents/PlugIns/imageformats")
+
 RCS_add_codesign(test
     INSTALL_DESTINATION bin)
 
