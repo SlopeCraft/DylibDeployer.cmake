@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(DylibDeployer.cmake LANGUAGES C CXX)
 
-set(CMAKE_INSTALL_PREFIX install)
-#set(CMAKE_INSTALL_PREFIX "install" CACHE STRING "")
+set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/install)
+#set(CMAKE_INSTALL_PREFIX install)
 
 find_package(Qt6 
     COMPONENTS Widgets
@@ -29,10 +29,10 @@ include(Codesigner.cmake)
 # QD_add_deployqt(test INSTALL_MODE 
 #     INSTALL_DESTINATION bin)
 
-# DylibD_add_deploy(test 
-#     INSTALL_DESTINATION bin)
-RCS_add_codesign(test
+DylibD_add_deploy(test 
     INSTALL_DESTINATION bin)
+# RCS_add_codesign(test
+#     INSTALL_DESTINATION bin)
 
 #set(bundle ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_PREFIX}/test.app)
 #set(bundle "/System/Applications/Utilities/Activity Monitor.app")
@@ -41,3 +41,5 @@ RCS_add_codesign(test
 #     FRAMEWORK_DIR "${bundle}/Contents/Frameworks"
 #     RPATH_POLICY REPLACE)
 # RCS_sign_configtime(test ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_PREFIX})
+
+include(CPack)

@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 
 if (DEFINED CMAKE_GENERATOR)
-    message(STATUS "DylibDeployer running at configuration time")
+    #message(STATUS "DylibDeployer running at configuration time")
     option(DylibD_configure_time "Whether this script is running at configuration time" ON)
 else ()
     # Otherwise we guess that it's running at build or installation time.
-    message(STATUS "DylibDeployer running at build/install time")
+    #message(STATUS "DylibDeployer running at build/install time")
     option(DylibD_configure_time "Whether this script is running at configuration time" OFF)
 endif ()
 
@@ -26,8 +26,11 @@ else()
     set(CMAKE_PREFIX_PATH       @CMAKE_PREFIX_PATH@)
     set(DylibD_working_dir      . CACHE STRING "")
     set(DylibD_install_dest     @DDad_INSTALL_DESTINATION@)
-    set(CMAKE_INSTALL_PREFIX    @CMAKE_INSTALL_PREFIX@ CACHE STRING "")
+    set(DylibD_path_to_exec     @DDad_PATH_TO_EXEC@)
 
+    if(NOT CMAKE_INSTALL_PREFIX)
+        set(CMAKE_INSTALL_PREFIX @CMAKE_INSTALL_PREFIX@)
+    endif()
     option(DylibD_run_directly "" OFF)
 endif()
 
@@ -98,7 +101,7 @@ function(DylibD_get_install_names lib_location out_list_name)
     if(IS_SYMLINK ${lib_location})
         set(old_loc ${lib_location})
         file(REAL_PATH ${lib_location} lib_location EXPAND_TILDE)
-        message(STATUS "Link \"${old_loc}\" resolved to \"${lib_location}\"")
+        #message(STATUS "Link \"${old_loc}\" resolved to \"${lib_location}\"")
     endif()
 
     cmake_path(GET lib_location STEM given_lib_stem)
@@ -197,7 +200,7 @@ function(DylibD_parse_framework_name install_name out_fw_name out_path_to_dylib 
     unset(${out_fw_name} PARENT_SCOPE)
     unset(${out_path_to_dylib} PARENT_SCOPE)
     unset(${out_version_letter} PARENT_SCOPE)
-    message(STATUS "Parsing framework name from install name ${install_name}")
+    #message(STATUS "Parsing framework name from install name ${install_name}")
 
     string(REGEX MATCH "/Versions/[A-Z]/[A-Za-z0-9_]+$" version_letter ${install_name})
     string(SUBSTRING ${version_letter} 10 1 version_letter)
@@ -320,7 +323,7 @@ function(DylibD_fix_install_name bin_location)
 
     DylibD_is_framework(${DDfin_INSTALL_NAME} is_framework)
     #message(STATUS "iname = ${DDfin_INSTALL_NAME}, is_framework = ${is_framework}")
-    # message(STATUS "Install name: ${DDfin_INSTALL_NAME}")
+    #message(STATUS "Install name: ${DDfin_INSTALL_NAME}")
 
     if(NOT ${is_framework})
         # Deploy simple dylib
@@ -340,11 +343,10 @@ function(DylibD_fix_install_name bin_location)
                 NO_CACHE
                 DOC "Find dependency \"${dep_name}\"")
             if(NOT dep_loc)
-                message(STATUS "Failed to find dependency \"${dep_name}\" with cmake find_file call. Try find command...")
-
+                message(STATUS "Failed to find \"${dep_name}\" with cmake find_file call. Try find command...")
                 DylibD_search_file_advanced(${dep_name} "/opt/homebrew;/usr/local/Cellar;/usr" dep_loc)
                 if(NOT dep_loc)
-                    message(STATUS "Failed to find dependency \"${dep_name}\".")
+                    message(FATAL_ERROR "Failed to find dependency \"${dep_name}\".")
                 endif()
             endif()
 
@@ -362,7 +364,7 @@ function(DylibD_fix_install_name bin_location)
         if(NOT fw_name)
             message(FATAL_ERROR "Invalid framework name \"${fw_name}\"")
         endif()
-        message(STATUS "Matched framework name \"${fw_name}\"")
+        #message(STATUS "Matched framework name \"${fw_name}\"")
 
         if((NOT DDfin_DRY_RUN) AND (NOT IS_DIRECTORY ${deployed_dep_loc}))
             # The required framework doesn't exist, search for it.
@@ -372,7 +374,7 @@ function(DylibD_fix_install_name bin_location)
                 message(FATAL_ERROR "Found framework ${fw_loc}, but dep file \"${fw_loc}/${path_to_dylib}\" doesn't exist.")
             endif()
             message(STATUS "Found framework \"${fw_name}\" at \"${fw_loc}\"")
-            message(STATUS "Copying ${fw_loc} to ${DDfin_FRAMEWORK_DIR}")
+            message(STATUS "Copy ${fw_loc} to ${DDfin_FRAMEWORK_DIR}")
             DylibD_copy_framework(NAME ${fw_name} 
                 LOCATION ${fw_loc} 
                 VERSION_LETTER ${version_letter} 
@@ -403,7 +405,7 @@ function(DylibD_fix_install_name bin_location)
     endif()
 
     if(NOT DDfin_DRY_RUN)
-        message(STATUS "Change install name with: \n  install_name_tool \"${bin_location}\" -change \"${DDfin_INSTALL_NAME}\" \"${new_iname}\"")
+        message(STATUS "Change install name of \"${bin_location}\":\n  from \"${DDfin_INSTALL_NAME}\" to \"${new_iname}\"")
         #Example:
         #install_name_tool libzip.5.dylib -change @loader_path/../../../../opt/xz/lib/libzstd.1.dylib @loader_path/libzstd.1.dylib
         execute_process(COMMAND install_name_tool "${bin_location}" -change "${DDfin_INSTALL_NAME}" "${new_iname}"
@@ -423,6 +425,10 @@ function(DylibD_deploy_libs bin_location)
       ${ARGN})
 
     file(REAL_PATH ${bin_location} bin_location)
+
+    if(NOT IS_DIRECTORY ${DDdl_FRAMEWORK_DIR})
+        file(MAKE_DIRECTORY ${DDdl_FRAMEWORK_DIR})
+    endif()
 
     # RPATH_POLICY: KEEP REPLACE
     # EXEC_PATH should not be set if binary is an executable
@@ -470,7 +476,7 @@ function(DylibD_deploy_libs bin_location)
         endif()
 
         if(NOT EXISTS ${resolved})
-            message(STATUS "${resolved} doesn't exist, deploy it.")
+            #message(STATUS "${resolved} doesn't exist, deploy it.")
             # The dependency doesn't exist. Try deploying it.
 
             DylibD_fix_install_name(${bin_location}
@@ -504,14 +510,8 @@ function(DylibD_deploy_libs bin_location)
 endfunction()
 
 
-# DylibD_deploy_libs bin_location
-# cmake_parse_arguments(DDdl ""
-#       "RPATH_POLICY;FRAMEWORK_DIR;EXEC_PATH;RPATH"
-#       ""
-#       ${ARGN})
-
 function(DylibD_add_deploy target)
-    cmake_parse_arguments(DDad "" "INSTALL_DESTINATION;RPATH_POLICY;RPATH" "" ${ARGN})
+    cmake_parse_arguments(DDad "" "INSTALL_DESTINATION;RPATH_POLICY;RPATH;PATH_TO_EXEC" "" ${ARGN})
     
     if(NOT TARGET ${target})
         message(FATAL_ERROR "${target} is not an target")
@@ -523,6 +523,9 @@ function(DylibD_add_deploy target)
         set(DDad_RPATH_POLICY REPLACE)
     endif()
     get_target_property(DylibD_bundle_version ${target} VERSION)
+    if(NOT DDad_PATH_TO_EXEC)
+        set(DDad_PATH_TO_EXEC "Contents/MacOS/${DylibD_bundle_name}")
+    endif()
 
     configure_file(${DylibD_source_file} ${configured_file}
         @ONLY)
@@ -531,34 +534,27 @@ function(DylibD_add_deploy target)
 endfunction()
 
 if(NOT ${DylibD_configure_time})
-    message(STATUS "DylibD_working_dir = \"${DylibD_working_dir}\"")
-    if(NOT ${DylibD_run_directly})
-
-
-        execute_process(COMMAND ${CMAKE_COMMAND} -DDylibD_run_directly:BOOL=ON -DDylibD_working_dir:FILEPATH=${DylibD_working_dir}/${CMAKE_INSTALL_PREFIX}/${DylibD_install_dest} -P ${DylibD_this_file}
-            WORKING_DIRECTORY ${DylibD_working_dir}/${CMAKE_INSTALL_PREFIX}/${DylibD_install_dest}
-            COMMAND_ERROR_IS_FATAL ANY)
-        return()
-    endif()
-
-    # set(DylibD_bundle_name      @DylibD_bundle_name@)
-    # set(DylibD_this_file        @configured_file@)
-    # set(DylibD_rpath_policy     @DDad_RPATH_POLICY@)
-    # set(DylibD_rpath            @DDad_RPATH@)
-    # set(CMAKE_PREFIX_PATH       @CMAKE_PREFIX_PATH@)
-    # set(DylibD_working_dir      @DDad_INSTALL_DESTINATION@ CACHE STRING "")
-
-    #"RPATH_POLICY;FRAMEWORK_DIR;EXEC_PATH;RPATH"
-    # message(STATUS "CMAKE_CURRENT_SOURCE_DIR = ${CMAKE_CURRENT_SOURCE_DIR}")
-    # message(STATUS "CMAKE_INSTALL_PREFIX = ${CMAKE_INSTALL_PREFIX}")
-
     execute_process(COMMAND pwd
         OUTPUT_VARIABLE current_working_dir)
     string(REPLACE "\n" "" current_working_dir ${current_working_dir})
-    message(STATUS "current_working_dir = ${current_working_dir}")
-    message(STATUS "DylibD_install_dest = ${DylibD_install_dest}")
+    #message(WARNING "DylibD_run_directly = ${DylibD_run_directly}")
+    #message(WARNING "current_working_dir = ${current_working_dir}")
+    #message(WARNING "DylibD_install_dest = ${DylibD_install_dest}")
+    #message(WARNING "DylibD_working_dir = \"${DylibD_working_dir}\"")
+    #message(WARNING "CMAKE_INSTALL_PREFIX = ${CMAKE_INSTALL_PREFIX}")
+    #message(WARNING "CMAKE_CURRENT_SOURCE_DIR = ${CMAKE_CURRENT_SOURCE_DIR}")
+    #message(WARNING "CMAKE_CURRENT_BINARY_DIR = ${CMAKE_CURRENT_BINARY_DIR}")
 
-    DylibD_deploy_libs("${DylibD_bundle_name}.app/Contents/MacOS/${DylibD_bundle_name}"
+
+    if(NOT ${DylibD_run_directly})
+        execute_process(COMMAND ${CMAKE_COMMAND} -DDylibD_run_directly:BOOL=ON -DDylibD_working_dir:FILEPATH=${CMAKE_INSTALL_PREFIX}/${DylibD_install_dest} -P ${DylibD_this_file}
+            WORKING_DIRECTORY ${CMAKE_INSTALL_PREFIX}/${DylibD_install_dest}
+            COMMAND_ERROR_IS_FATAL ANY)
+        return()
+    endif()
+    message(STATUS "Deploying dylibs for ${DylibD_bundle_name}.app/${DylibD_path_to_exec}")
+
+    DylibD_deploy_libs("${DylibD_bundle_name}.app/${DylibD_path_to_exec}"
         FRAMEWORK_DIR "${current_working_dir}/${DylibD_bundle_name}.app/Contents/Frameworks"
         RPATH_POLICY ${DylibD_rpath_policy}
         RPATH ${DylibD_rpath}
