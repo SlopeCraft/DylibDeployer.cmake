@@ -475,31 +475,24 @@ function(DylibD_deploy_libs bin_location)
             continue()
         endif()
 
-        if(NOT EXISTS ${resolved})
-            #message(STATUS "${resolved} doesn't exist, deploy it.")
-            # The dependency doesn't exist. Try deploying it.
 
-            DylibD_fix_install_name(${bin_location}
-                INSTALL_NAME ${iname}
-                FRAMEWORK_DIR ${DDdl_FRAMEWORK_DIR}
-                RPATH_POLICY ${DDdl_RPATH_POLICY}
-                RPATH ${DDdl_RPATH}
-                OUT_DEPLOYED_FILE deployed_file
-                )
-            if(NOT EXISTS ${deployed_file})
-                message(FATAL_ERROR "${bin_filename} requires \"${deployed_file}\" but it is not deployed. install name = \"${iname}\"")
-                continue()
-            endif()
-
-            set(resolved ${deployed_file})
-            #message(STATUS "\"${bin_filename}\" depends on \"${iname}\" which resolves to \"${resolved}\" but it doesn't exist.")
-            #continue()
+        DylibD_fix_install_name(${bin_location}
+            INSTALL_NAME ${iname}
+            FRAMEWORK_DIR ${DDdl_FRAMEWORK_DIR}
+            RPATH_POLICY ${DDdl_RPATH_POLICY}
+            RPATH ${DDdl_RPATH}
+            OUT_DEPLOYED_FILE deployed_file
+            )
+        if(NOT EXISTS ${deployed_file})
+            message(FATAL_ERROR "${bin_filename} requires \"${deployed_file}\" but it is not deployed. install name = \"${iname}\"")
+            continue()
         endif()
+
+        set(resolved ${deployed_file})
 
         if(NOT EXISTS ${resolved})
             message(FATAL_ERROR "Failed to deploy ${resolved} for install name ${iname}")
         endif()
-
 
         DylibD_deploy_libs(${resolved}
             RPATH_POLICY ${DDdl_RPATH_POLICY}
