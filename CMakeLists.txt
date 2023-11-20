@@ -31,8 +31,8 @@ QD_add_deployqt(test INSTALL_MODE
 
 DylibD_add_deploy(test 
     INSTALL_DESTINATION bin)
-# RCS_add_codesign(test
-#     INSTALL_DESTINATION bin)
+RCS_add_codesign(test
+    INSTALL_DESTINATION bin)
 
 #set(bundle ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_PREFIX}/test.app)
 #set(bundle "/System/Applications/Utilities/Activity Monitor.app")

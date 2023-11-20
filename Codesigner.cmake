@@ -1,31 +1,32 @@
 if (DEFINED CMAKE_GENERATOR)
-    message(STATUS "Codesigner running at configuration time")
+    #message(STATUS "Codesigner running at configuration time")
     option(RCS_configure_time "Whether this script is running at configuration time" ON)
 else ()
     # Otherwise we guess that it's running at build or installation time.
-    message(STATUS "Codesigner running at build/install time")
+    #message(STATUS "Codesigner running at build/install time")
     option(RCS_configure_time "Whether this script is running at configuration time" OFF)
 endif ()
 
-option(RCS_run_directly "" OFF)
 if(RCS_configure_time)
     set(RCS_source_file ${CMAKE_CURRENT_LIST_FILE})
 else()
-    set(RCS_this_file @rcs_this_file@)
-    set(RCS_bundle_name @rcs_bundle_name@)
+    set(RCS_this_file      @rcs_this_file@)
+    set(RCS_bundle_name    @rcs_bundle_name@)
     set(RCS_bundle_version @rcs_bundle_version@)
-    set(RCS_working_dir . CACHE FILEPATH "")
-    set(CMAKE_INSTALL_PREFIX @CMAKE_INSTALL_PREFIX@)
-    set(RCS_install_dest @rcs_install_dest@)
+    set(RCS_working_dir    .                    CACHE FILEPATH "")
+    set(RCS_install_dest   @rcs_install_dest@)
+    if(NOT CMAKE_INSTALL_PREFIX)
+        set(CMAKE_INSTALL_PREFIX @CMAKE_INSTALL_PREFIX@)
+    endif()
+    option(RCS_run_directly "" OFF)
 endif()
 
 
 function(RCS_add_codesign target)
     cmake_parse_arguments(RCSac "" "INSTALL_DESTINATION" "" ${ARGN})
 
-    set(RCSac_INSTALL_DESTINATION . CACHE STRING "")
     if(NOT RCSac_INSTALL_DESTINATION)
-        message(FATAL_ERROR)
+        set(RCSac_INSTALL_DESTINATION .)
     endif()
     
     set(rcs_install_dest ${RCSac_INSTALL_DESTINATION})
@@ -51,12 +52,12 @@ function(RCS_sign_configtime bundle working_dir)
 endfunction()
 
 if(NOT RCS_configure_time)
+    #message(STATUS "RCS_working_dir = \"${RCS_working_dir}\"")
     if(NOT RCS_run_directly)
 
-        message(STATUS "RCS_working_dir = \"${RCS_working_dir}\"")
 
-        execute_process(COMMAND ${CMAKE_COMMAND} -DRCS_run_directly:BOOL=ON -DRCS_working_dir=${RCS_working_dir}/${CMAKE_INSTALL_PREFIX}/${RCS_install_dest} -P ${RCS_this_file}
-            WORKING_DIRECTORY ${RCS_working_dir}
+        execute_process(COMMAND ${CMAKE_COMMAND} -DRCS_run_directly:BOOL=ON -DRCS_working_dir=${CMAKE_INSTALL_PREFIX}/${RCS_install_dest} -P ${RCS_this_file}
+            WORKING_DIRECTORY ${CMAKE_INSTALL_PREFIX}/${RCS_install_dest}
             COMMAND_ERROR_IS_FATAL ANY)
         return()
     endif()
@@ -73,8 +74,6 @@ if(NOT RCS_configure_time)
     if(IS_SYMLINK "${bundle_prefix}/${RCS_bundle_name}")
         message(WARNING "\"${bundle_prefix}/${RCS_bundle_name}\" is a symlink, but it should be regular file.")
     endif ()
-
-    message(STATUS "RCS_working_dir = \"${RCS_working_dir}\"")
 
     execute_process(COMMAND codesign --force --deep --sign=- "${RCS_bundle_name}.app"
         WORKING_DIRECTORY ${RCS_working_dir}
