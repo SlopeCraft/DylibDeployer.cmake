@@ -8,13 +8,22 @@ find_package(Qt6
     COMPONENTS Widgets
     REQUIRED)
 find_package(libzip REQUIRED)
+add_library(shared_lib SHARED lib.c lib.h)
+target_link_libraries(shared_lib PRIVATE libzip::zip)
+include(GenerateExportHeader)
+generate_export_header(shared_lib)
+target_include_directories(shared_lib PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+
 add_executable(test main.cpp)
-target_link_libraries(test PRIVATE Qt6::Widgets libzip::zip)
+target_link_libraries(test PRIVATE Qt6::Widgets shared_lib libzip::zip)
 target_compile_features(test PRIVATE cxx_std_20)
 set_target_properties(test PROPERTIES
     MACOSX_BUNDLE ON)
 install(TARGETS test
     BUNDLE DESTINATION bin)
+install(TARGETS shared_lib
+    RUNTIME DESTINATION bin/test.app/Contents/Frameworks
+    LIBRARY DESTINATION bin/test.app/Contents/Frameworks)
 
 include(DylibDeployer.cmake)
 include(3rdParty/DLLDeployer/QtDeployer.cmake)
