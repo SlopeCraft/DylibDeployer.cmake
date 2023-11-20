@@ -493,16 +493,18 @@ function(DylibD_deploy_libs bin_location)
         endif()
 
         if((EXISTS ${resolved}) AND (${resolved} MATCHES ${DDdl_FRAMEWORK_DIR}))
-            continue()
+            # The dependency exists in framework dir, we don't need to fix install name for it.
+            # However we still need to deploy deps for ${resolved}
+        else()
+            DylibD_fix_install_name(${bin_location}
+                INSTALL_NAME ${iname}
+                FRAMEWORK_DIR ${DDdl_FRAMEWORK_DIR}
+                RPATH_POLICY ${DDdl_RPATH_POLICY}
+                RPATH ${DDdl_RPATH}
+                OUT_DEPLOYED_FILE deployed_file
+                )
         endif()
 
-        DylibD_fix_install_name(${bin_location}
-            INSTALL_NAME ${iname}
-            FRAMEWORK_DIR ${DDdl_FRAMEWORK_DIR}
-            RPATH_POLICY ${DDdl_RPATH_POLICY}
-            RPATH ${DDdl_RPATH}
-            OUT_DEPLOYED_FILE deployed_file
-            )
         if(NOT EXISTS ${deployed_file})
             message(FATAL_ERROR "${bin_filename} requires \"${deployed_file}\" but it is not deployed. install name = \"${iname}\"")
             continue()
